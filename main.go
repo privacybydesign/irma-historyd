@@ -35,15 +35,55 @@ type Conf struct {
 }
 
 // Types for entries in the database tables
+
+// Records an issued attribute
 type IssueEvent struct {
 	ID        uint `gorm:"primary_key"`
 	When      time.Time
 	Attribute string
 }
 
+// Records a registration on the keyshareserver
+type RegistrationEvent struct {
+	ID     uint `gorm:"primary_key"`
+	When   time.Time
+	Double bool
+}
+
+// Records the verification of an e-mail address on the keyshareserver
+type EmailVerifiedEvent struct {
+	ID   uint `gorm:"primary_key"`
+	When time.Time
+}
+
+// Records an unregistration on the keyshareserver
+type UnregistrationEvent struct {
+	ID   uint `gorm:"primary_key"`
+	When time.Time
+}
+
+// Records a login attempt
+type LoginEvent struct {
+	ID      uint `gorm:"primary_key"`
+	When    time.Time
+	Success bool
+	WithOTP bool
+}
+
+// Records a pin being blocked
+type PinBlockedEvent struct {
+	ID   uint `gorm:"primary_key"`
+	When time.Time
+}
+
 // Type of JSON request sent to the server
 type SubmitRequest struct {
-	Issuances []IssueEvent
+	Issuances       []IssueEvent
+	Registrations   []RegistrationEvent
+	Unregistrations []UnregistrationEvent
+	Logins          []LoginEvent
+	PinsBlocked     []PinBlockedEvent
+	EmailsVerified  []EmailVerifiedEvent
 }
 
 // Globals
@@ -153,6 +193,45 @@ func submitHandler(w http.ResponseWriter, r *http.Request) {
 		nRegistered++
 	}
 
+	for _, registration := range events.Registrations {
+		if err := db.Create(&registration).Error; err != nil {
+			log.Printf("Error while inserting RegistrationEvent: %s", err)
+			continue
+		}
+		nRegistered++
+	}
+
+	for _, unregistration := range events.Unregistrations {
+		if err := db.Create(&unregistration).Error; err != nil {
+			log.Printf("Error while inserting UnregistrationEvent: %s", err)
+			continue
+		}
+		nRegistered++
+	}
+
+	for _, login := range events.Logins {
+		if err := db.Create(&login).Error; err != nil {
+			log.Printf("Error while inserting LoginEvent: %s", err)
+			continue
+		}
+		nRegistered++
+	}
+
+	for _, pinBlocked := range events.PinsBlocked {
+		if err := db.Create(&pinBlocked).Error; err != nil {
+			log.Printf("Error while inserting PinBlockedEvent: %s", err)
+			continue
+		}
+		nRegistered++
+	}
+
+	for _, emailVerified := range events.EmailsVerified {
+		if err := db.Create(&emailVerified).Error; err != nil {
+			log.Printf("Error while inserting EmailVerifiedEvent: %s", err)
+			continue
+		}
+		nRegistered++
+	}
 	fmt.Fprintf(w, "ok, registered %d", nRegistered)
 	log.Printf("Registered %d", nRegistered) // TODO remove
 }
