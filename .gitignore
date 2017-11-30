@@ -1,3 +1,4 @@
 /irma-historyd
 /db.sqlite3
 /config.yaml
+/GeoLite2-City.mmdb

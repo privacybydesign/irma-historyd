@@ -13,17 +13,26 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/jinzhu/gorm"
+	"github.com/oschwald/geoip2-golang"
 	"gopkg.in/yaml.v2"
 
 	_ "github.com/jinzhu/gorm/dialects/mysql"
 	_ "github.com/jinzhu/gorm/dialects/postgres"
 	_ "github.com/jinzhu/gorm/dialects/sqlite"
+)
+
+// Globals
+var (
+	conf  Conf
+	db    *gorm.DB
+	geoDb *geoip2.Reader
 )
 
 // Configuration
@@ -32,51 +41,10 @@ type Conf struct {
 	DSN                        string // DSN, eg.  "dbuser:password@/database"
 	AllowedAuthorizationTokens []string
 	BindAddr                   string // address to bind to, eg. ":8080"
+	GeoDb                      string // path to GeoLite2/GeoIP2 db
 }
 
-// Types for entries in the database tables
-
-// Records an issued attribute
-type IssueEvent struct {
-	ID        uint `gorm:"primary_key"`
-	When      time.Time
-	Attribute string
-}
-
-// Records a registration on the keyshareserver
-type RegistrationEvent struct {
-	ID     uint `gorm:"primary_key"`
-	When   time.Time
-	Double bool
-}
-
-// Records the verification of an e-mail address on the keyshareserver
-type EmailVerifiedEvent struct {
-	ID   uint `gorm:"primary_key"`
-	When time.Time
-}
-
-// Records an unregistration on the keyshareserver
-type UnregistrationEvent struct {
-	ID   uint `gorm:"primary_key"`
-	When time.Time
-}
-
-// Records a login attempt
-type LoginEvent struct {
-	ID      uint `gorm:"primary_key"`
-	When    time.Time
-	Success bool
-	WithOTP bool
-}
-
-// Records a pin being blocked
-type PinBlockedEvent struct {
-	ID   uint `gorm:"primary_key"`
-	When time.Time
-}
-
-// Type of JSON request sent to the server
+// Data sent along with a "/submit" POST request.
 type SubmitRequest struct {
 	Issuances       []IssueEvent
 	Registrations   []RegistrationEvent
@@ -86,9 +54,191 @@ type SubmitRequest struct {
 	EmailsVerified  []EmailVerifiedEvent
 }
 
-// Globals
-var conf Conf
-var db *gorm.DB
+type Event interface {
+	Store() error
+}
+
+// For each event, we have a struct (eg. IssueEvent) with the data sent in the
+// POST request and a struct (eg. IssueEventRecord) with the fields stored
+// in the database.
+
+// Records an issued attribute
+type IssueEvent struct {
+	When      time.Time
+	Attribute string
+	IP        string
+}
+type IssueEventRecord struct {
+	ID        uint      `gorm:"primary_key"`
+	When      time.Time `gorm:"index"`
+	Attribute string
+	Country   string
+	City      string
+}
+
+func (IssueEventRecord) TableName() string { return "issue_events" }
+
+func (e *IssueEvent) Store() error {
+	country, city := geoLookup(e.IP)
+	rec := IssueEventRecord{
+		When:      e.When,
+		Attribute: e.Attribute,
+		Country:   country,
+		City:      city,
+	}
+	return db.Create(&rec).Error
+}
+
+// Records a registration on the keyshareserver
+type RegistrationEvent struct {
+	When   time.Time
+	Double bool
+	IP     string
+}
+type RegistrationEventRecord struct {
+	ID      uint      `gorm:"primary_key"`
+	When    time.Time `gorm:"index"`
+	Double  bool
+	Country string
+	City    string
+}
+
+func (RegistrationEventRecord) TableName() string { return "registration_events" }
+
+func (e *RegistrationEvent) Store() error {
+	country, city := geoLookup(e.IP)
+	rec := RegistrationEventRecord{
+		When:    e.When,
+		Double:  e.Double,
+		Country: country,
+		City:    city,
+	}
+	return db.Create(&rec).Error
+}
+
+// Records the verification of an e-mail address on the keyshareserver
+type EmailVerifiedEvent struct {
+	When time.Time
+	IP   string
+}
+type EmailVerifiedEventRecord struct {
+	ID      uint      `gorm:"primary_key"`
+	When    time.Time `gorm:"index"`
+	Country string
+	City    string
+}
+
+func (EmailVerifiedEventRecord) TableName() string { return "email_verified_events" }
+
+func (e *EmailVerifiedEvent) Store() error {
+	country, city := geoLookup(e.IP)
+	rec := EmailVerifiedEventRecord{
+		When:    e.When,
+		Country: country,
+		City:    city,
+	}
+	return db.Create(&rec).Error
+}
+
+// Records an unregistration on the keyshareserver
+type UnregistrationEvent struct {
+	When time.Time
+	IP   string
+}
+type UnregistrationEventRecord struct {
+	ID      uint      `gorm:"primary_key"`
+	When    time.Time `gorm:"index"`
+	Country string
+	City    string
+}
+
+func (UnregistrationEventRecord) TableName() string { return "unregistration_events" }
+
+func (e *UnregistrationEvent) Store() error {
+	country, city := geoLookup(e.IP)
+	rec := UnregistrationEventRecord{
+		When:    e.When,
+		Country: country,
+		City:    city,
+	}
+	return db.Create(&rec).Error
+}
+
+// Records a login attempt
+type LoginEvent struct {
+	When    time.Time
+	Success bool
+	WithOTP bool
+	IP      string
+}
+type LoginEventRecord struct {
+	ID      uint      `gorm:"primary_key"`
+	When    time.Time `gorm:"index"`
+	Success bool
+	WithOTP bool
+	Country string
+	City    string
+}
+
+func (LoginEventRecord) TableName() string { return "login_events" }
+
+func (e *LoginEvent) Store() error {
+	country, city := geoLookup(e.IP)
+	rec := LoginEventRecord{
+		When:    e.When,
+		Country: country,
+		Success: e.Success,
+		WithOTP: e.WithOTP,
+		City:    city,
+	}
+	return db.Create(&rec).Error
+}
+
+// Records a pin being blocked
+type PinBlockedEvent struct {
+	When time.Time
+	IP   string
+}
+type PinBlockedEventRecord struct {
+	ID      uint      `gorm:"primary_key"`
+	When    time.Time `gorm:"index"`
+	Country string
+	City    string
+}
+
+func (e *PinBlockedEvent) Store() error {
+	country, city := geoLookup(e.IP)
+	rec := PinBlockedEventRecord{
+		When:    e.When,
+		Country: country,
+		City:    city,
+	}
+	return db.Create(&rec).Error
+}
+func (PinBlockedEventRecord) TableName() string { return "pin_blocked_events" }
+
+func (r *SubmitRequest) List() []Event {
+	ret := []Event{}
+	for _, event := range r.Issuances {
+		ret = append(ret, &event)
+	}
+	for _, event := range r.Registrations {
+		ret = append(ret, &event)
+	}
+	for _, event := range r.Unregistrations {
+		ret = append(ret, &event)
+	}
+	for _, event := range r.Logins {
+		ret = append(ret, &event)
+	}
+	for _, event := range r.PinsBlocked {
+		ret = append(ret, &event)
+	}
+	for _, event := range r.EmailsVerified {
+		ret = append(ret, &event)
+	}
+	return ret
+}
 
 func main() {
 	var confPath string
@@ -119,6 +269,19 @@ func main() {
 		log.Fatalf("Could not parse config file: %s", err)
 	}
 
+	// open geo database, if available
+	if conf.GeoDb != "" {
+		log.Println("Opening geo database ...")
+		geoDb, err = geoip2.Open(conf.GeoDb)
+		if err != nil {
+			log.Fatalf(" failed to open %s: %s", conf.GeoDb, err)
+		}
+		defer geoDb.Close()
+		log.Println(" ok")
+	} else {
+		log.Println("Note: 'geodb' not set")
+	}
+
 	// connect to database
 	log.Println("Connecting to database ...")
 	db, err = gorm.Open(conf.DB, conf.DSN)
@@ -127,9 +290,17 @@ func main() {
 		log.Fatalf(" %s: could not connect to %s: %s", conf.DB, conf.DSN, err)
 	}
 	defer db.Close()
+	log.Println(" ok")
 
 	log.Println("Auto-migration (if necessary) ...")
-	db.AutoMigrate(&IssueEvent{})
+	db.AutoMigrate(
+		IssueEventRecord{},
+		RegistrationEventRecord{},
+		EmailVerifiedEventRecord{},
+		UnregistrationEventRecord{},
+		LoginEventRecord{},
+		PinBlockedEventRecord{})
+	log.Println(" ok")
 
 	// set up HTTP server
 	http.HandleFunc("/submit", submitHandler)
@@ -145,6 +316,20 @@ func main() {
 	}
 
 	log.Fatal(http.ListenAndServe(conf.BindAddr, nil))
+}
+
+// Look up IP address
+func geoLookup(ip string) (countryCode string, city string) {
+	pIp := net.ParseIP(ip)
+	if pIp == nil {
+		return
+	}
+	record, err := geoDb.City(pIp)
+	if err != nil {
+		log.Printf("geoLookup(%s): %s", ip, err)
+		return
+	}
+	return record.Country.IsoCode, record.City.Names["en"]
 }
 
 // Check if the right authorization header is present
@@ -185,53 +370,14 @@ func submitHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	for _, issue := range events.Issuances {
-		if err := db.Create(&issue).Error; err != nil {
-			log.Printf("Error while inserting IssueEvent: %s", err)
+	for _, event := range events.List() {
+		if err := event.Store(); err != nil {
+			log.Printf("Error while inserting event: %s", err)
 			continue
 		}
 		nRegistered++
 	}
 
-	for _, registration := range events.Registrations {
-		if err := db.Create(&registration).Error; err != nil {
-			log.Printf("Error while inserting RegistrationEvent: %s", err)
-			continue
-		}
-		nRegistered++
-	}
-
-	for _, unregistration := range events.Unregistrations {
-		if err := db.Create(&unregistration).Error; err != nil {
-			log.Printf("Error while inserting UnregistrationEvent: %s", err)
-			continue
-		}
-		nRegistered++
-	}
-
-	for _, login := range events.Logins {
-		if err := db.Create(&login).Error; err != nil {
-			log.Printf("Error while inserting LoginEvent: %s", err)
-			continue
-		}
-		nRegistered++
-	}
-
-	for _, pinBlocked := range events.PinsBlocked {
-		if err := db.Create(&pinBlocked).Error; err != nil {
-			log.Printf("Error while inserting PinBlockedEvent: %s", err)
-			continue
-		}
-		nRegistered++
-	}
-
-	for _, emailVerified := range events.EmailsVerified {
-		if err := db.Create(&emailVerified).Error; err != nil {
-			log.Printf("Error while inserting EmailVerifiedEvent: %s", err)
-			continue
-		}
-		nRegistered++
-	}
 	fmt.Fprintf(w, "ok, registered %d", nRegistered)
 	log.Printf("Registered %d", nRegistered) // TODO remove
 }
