@@ -250,7 +250,7 @@ func main() {
 
 	// parse configuration file
 	if _, err := os.Stat(confPath); os.IsNotExist(err) {
-		fmt.Printf("Could not find config file: %s", confPath)
+		fmt.Printf("Could not find config file: %s\n", confPath)
 		fmt.Println("It should look like")
 		fmt.Println("")
 		fmt.Println("   db: mysql")
