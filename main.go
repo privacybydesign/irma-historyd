@@ -220,22 +220,28 @@ func (PinBlockedEventRecord) TableName() string { return "pin_blocked_events" }
 func (r *SubmitRequest) List() []Event {
 	ret := []Event{}
 	for _, event := range r.Issuances {
-		ret = append(ret, &event)
+		event2 := event
+		ret = append(ret, &event2)
 	}
 	for _, event := range r.Registrations {
-		ret = append(ret, &event)
+		event2 := event
+		ret = append(ret, &event2)
 	}
 	for _, event := range r.Unregistrations {
-		ret = append(ret, &event)
+		event2 := event
+		ret = append(ret, &event2)
 	}
 	for _, event := range r.Logins {
-		ret = append(ret, &event)
+		event2 := event
+		ret = append(ret, &event2)
 	}
 	for _, event := range r.PinsBlocked {
-		ret = append(ret, &event)
+		event2 := event
+		ret = append(ret, &event2)
 	}
 	for _, event := range r.EmailsVerified {
-		ret = append(ret, &event)
+		event2 := event
+		ret = append(ret, &event2)
 	}
 	return ret
 }
