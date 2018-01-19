@@ -1,4 +1,4 @@
-// (c) 2017 - Bas Westerbaan <bas@westerbaan.name>
+// (c) 2017, 2018 - Bas Westerbaan <bas@westerbaan.name>
 // You may redistribute this file under the conditions of the GPLv3.
 
 // irma-historyd is a simple webserver that collects events from
@@ -81,7 +81,7 @@ func (IssueEventRecord) TableName() string { return "issue_events" }
 func (e *IssueEvent) Store() error {
 	country, city := geoLookup(e.IP)
 	rec := IssueEventRecord{
-		When:      e.When,
+		When:      roundTime(e.When),
 		Attribute: e.Attribute,
 		Country:   country,
 		City:      city,
@@ -108,7 +108,7 @@ func (RegistrationEventRecord) TableName() string { return "registration_events"
 func (e *RegistrationEvent) Store() error {
 	country, city := geoLookup(e.IP)
 	rec := RegistrationEventRecord{
-		When:    e.When,
+		When:    roundTime(e.When),
 		Double:  e.Double,
 		Country: country,
 		City:    city,
@@ -133,7 +133,7 @@ func (EmailVerifiedEventRecord) TableName() string { return "email_verified_even
 func (e *EmailVerifiedEvent) Store() error {
 	country, city := geoLookup(e.IP)
 	rec := EmailVerifiedEventRecord{
-		When:    e.When,
+		When:    roundTime(e.When),
 		Country: country,
 		City:    city,
 	}
@@ -157,7 +157,7 @@ func (UnregistrationEventRecord) TableName() string { return "unregistration_eve
 func (e *UnregistrationEvent) Store() error {
 	country, city := geoLookup(e.IP)
 	rec := UnregistrationEventRecord{
-		When:    e.When,
+		When:    roundTime(e.When),
 		Country: country,
 		City:    city,
 	}
@@ -185,7 +185,7 @@ func (LoginEventRecord) TableName() string { return "login_events" }
 func (e *LoginEvent) Store() error {
 	country, city := geoLookup(e.IP)
 	rec := LoginEventRecord{
-		When:    e.When,
+		When:    roundTime(e.When),
 		Country: country,
 		Success: e.Success,
 		WithOTP: e.WithOTP,
@@ -209,7 +209,7 @@ type PinBlockedEventRecord struct {
 func (e *PinBlockedEvent) Store() error {
 	country, city := geoLookup(e.IP)
 	rec := PinBlockedEventRecord{
-		When:    e.When,
+		When:    roundTime(e.When),
 		Country: country,
 		City:    city,
 	}
@@ -336,6 +336,13 @@ func geoLookup(ip string) (countryCode string, city string) {
 		return
 	}
 	return record.Country.IsoCode, record.City.Names["en"]
+}
+
+// Rounds the time down to a single day
+func roundTime(t time.Time) time.Time {
+	s := t.Unix()
+	s -= s % (60 * 60 * 24)
+	return time.Unix(s, 0)
 }
 
 // Check if the right authorization header is present
