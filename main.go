@@ -79,12 +79,11 @@ type IssueEventRecord struct {
 func (IssueEventRecord) TableName() string { return "issue_events" }
 
 func (e *IssueEvent) Store() error {
-	country, city := geoLookup(e.IP)
+	country := geoLookup(e.IP)
 	rec := IssueEventRecord{
 		When:      roundTime(e.When),
 		Attribute: e.Attribute,
 		Country:   country,
-		City:      city,
 	}
 	return db.Create(&rec).Error
 }
@@ -100,18 +99,16 @@ type RegistrationEventRecord struct {
 	When    time.Time `gorm:"index"`
 	Double  bool
 	Country string
-	City    string
 }
 
 func (RegistrationEventRecord) TableName() string { return "registration_events" }
 
 func (e *RegistrationEvent) Store() error {
-	country, city := geoLookup(e.IP)
+	country := geoLookup(e.IP)
 	rec := RegistrationEventRecord{
 		When:    roundTime(e.When),
 		Double:  e.Double,
 		Country: country,
-		City:    city,
 	}
 	return db.Create(&rec).Error
 }
@@ -125,17 +122,15 @@ type EmailVerifiedEventRecord struct {
 	ID      uint      `gorm:"primary_key"`
 	When    time.Time `gorm:"index"`
 	Country string
-	City    string
 }
 
 func (EmailVerifiedEventRecord) TableName() string { return "email_verified_events" }
 
 func (e *EmailVerifiedEvent) Store() error {
-	country, city := geoLookup(e.IP)
+	country := geoLookup(e.IP)
 	rec := EmailVerifiedEventRecord{
 		When:    roundTime(e.When),
 		Country: country,
-		City:    city,
 	}
 	return db.Create(&rec).Error
 }
@@ -149,17 +144,15 @@ type UnregistrationEventRecord struct {
 	ID      uint      `gorm:"primary_key"`
 	When    time.Time `gorm:"index"`
 	Country string
-	City    string
 }
 
 func (UnregistrationEventRecord) TableName() string { return "unregistration_events" }
 
 func (e *UnregistrationEvent) Store() error {
-	country, city := geoLookup(e.IP)
+	country := geoLookup(e.IP)
 	rec := UnregistrationEventRecord{
 		When:    roundTime(e.When),
 		Country: country,
-		City:    city,
 	}
 	return db.Create(&rec).Error
 }
@@ -177,19 +170,17 @@ type LoginEventRecord struct {
 	Success bool
 	WithOTP bool
 	Country string
-	City    string
 }
 
 func (LoginEventRecord) TableName() string { return "login_events" }
 
 func (e *LoginEvent) Store() error {
-	country, city := geoLookup(e.IP)
+	country := geoLookup(e.IP)
 	rec := LoginEventRecord{
 		When:    roundTime(e.When),
 		Country: country,
 		Success: e.Success,
 		WithOTP: e.WithOTP,
-		City:    city,
 	}
 	return db.Create(&rec).Error
 }
@@ -203,15 +194,13 @@ type PinBlockedEventRecord struct {
 	ID      uint      `gorm:"primary_key"`
 	When    time.Time `gorm:"index"`
 	Country string
-	City    string
 }
 
 func (e *PinBlockedEvent) Store() error {
-	country, city := geoLookup(e.IP)
+	country := geoLookup(e.IP)
 	rec := PinBlockedEventRecord{
 		When:    roundTime(e.When),
 		Country: country,
-		City:    city,
 	}
 	return db.Create(&rec).Error
 }
@@ -325,17 +314,17 @@ func main() {
 }
 
 // Look up IP address
-func geoLookup(ip string) (countryCode string, city string) {
+func geoLookup(ip string) string {
 	pIp := net.ParseIP(ip)
 	if pIp == nil {
-		return
+		return ""
 	}
 	record, err := geoDb.City(pIp)
 	if err != nil {
 		log.Printf("geoLookup(%s): %s", ip, err)
-		return
+		return ""
 	}
-	return record.Country.IsoCode, record.City.Names["en"]
+	return record.Country.IsoCode
 }
 
 // Rounds the time down to a single day
